@@ -24,6 +24,9 @@ export function buildDeveloperCardReportV1(payload = {}) {
     public_repo_count: numberOrZero(payload.public_repo_count),
     evaluated_count: numberOrZero(payload.evaluated_count),
     showcase_count: numberOrZero(payload.showcase_count),
+    evidence_count: numberOrZero(payload.evidence_count),
+    evidence_coverage: boundedPercent(payload.evidence_coverage),
+    evidence_summary: sanitizeEvidenceSummary(payload.evidence_summary),
     main_languages: text(payload.main_languages),
     latest_at: nullableText(payload.latest_at),
     recommended,
@@ -51,7 +54,6 @@ export function decodePublicReport(token) {
     if (payload?.schema === REPORT_SCHEMA && Number(payload?.schema_version) === REPORT_SCHEMA_VERSION) {
       return buildDeveloperCardReportV1(payload);
     }
-    // Backward compatibility for FV URLs issued before the machine-readable contract.
     if (payload?.v === 1) return buildDeveloperCardReportV1(payload);
     return null;
   } catch {
@@ -76,7 +78,6 @@ export function readPublicReportFromLocation(locationLike = globalThis.location)
   const queryToken = new URLSearchParams(search).get('report');
   if (queryToken) return decodePublicReport(queryToken);
 
-  // Legacy FV support: old shared URLs used #report= and remain readable.
   const hash = String(locationLike?.hash || '').replace(/^#/, '');
   if (hash.startsWith('report=')) return decodePublicReport(hash.slice('report='.length));
   return null;
@@ -110,7 +111,31 @@ function sanitizeDetail(detail, publicNames) {
     })),
     traits: tupleList(d.traits, 8),
     strengths: safeArray(d.strengths).map(text).filter(Boolean).slice(0, 6),
-    growth: safeArray(d.growth).map(text).filter(Boolean).slice(0, 6)
+    growth: safeArray(d.growth).map(text).filter(Boolean).slice(0, 6),
+    evidence: sanitizeDetailEvidence(d.evidence)
+  };
+}
+
+function sanitizeEvidenceSummary(value) {
+  const e = value && typeof value === 'object' ? value : {};
+  return {
+    signatures:safeArray(e.signatures).map(text).filter(Boolean).slice(0,12),
+    strong_architecture_repos:numberOrZero(e.strong_architecture_repos),
+    repos_with_tests:numberOrZero(e.repos_with_tests),
+    repos_with_ci:numberOrZero(e.repos_with_ci)
+  };
+}
+
+function sanitizeDetailEvidence(value) {
+  const e = value && typeof value === 'object' ? value : {};
+  return {
+    analyzed_repos:numberOrZero(e.analyzed_repos),
+    evaluated_repos:numberOrZero(e.evaluated_repos),
+    coverage:boundedPercent(e.coverage),
+    signatures:safeArray(e.signatures).map(text).filter(Boolean).slice(0,12),
+    repos_with_tests:numberOrZero(e.repos_with_tests),
+    repos_with_ci:numberOrZero(e.repos_with_ci),
+    strong_architecture_repos:numberOrZero(e.strong_architecture_repos)
   };
 }
 
@@ -124,6 +149,7 @@ function safeArray(value) { return Array.isArray(value) ? value : []; }
 function text(value) { return value == null ? '' : String(value).slice(0, 500); }
 function nullableText(value) { const v = text(value); return v || null; }
 function numberOrZero(value) { const n = Number(value); return Number.isFinite(n) ? n : 0; }
+function boundedPercent(value) { return Math.max(0, Math.min(100, numberOrZero(value))); }
 function safeHttpUrl(value) {
   const raw = text(value);
   if (!raw) return '';
