@@ -73,10 +73,9 @@ export async function exportShareCardPng(model) {
   ctx.fillStyle=glow; ctx.fillRect(0,0,1200,675);
   ctx.strokeStyle='rgba(114,83,255,.7)'; ctx.lineWidth=2; roundRect(ctx,20,20,1160,635,24); ctx.stroke();
 
-  // Character zone — canonical share-card layout.
   try {
     const img = await loadImage(model.avatar_src);
-    drawContain(ctx,img,28,42,255,570);
+    drawContain(ctx,img,18,38,270,580);
   } catch {}
 
   ctx.fillStyle='#dfe8ff'; ctx.font='800 22px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif'; ctx.fillText('GitHub解析でわかる',300,74);
@@ -92,15 +91,15 @@ export async function exportShareCardPng(model) {
     const x=300+i*142,y=348,w=130,h=110;
     ctx.fillStyle='rgba(7,20,40,.76)'; ctx.strokeStyle=i%2?'rgba(165,82,255,.55)':'rgba(70,190,255,.5)'; roundRect(ctx,x,y,w,h,10); ctx.fill();ctx.stroke();
     ctx.fillStyle='#b9c6df';ctx.font='700 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.textAlign='center';ctx.fillText(label,x+w/2,y+36);
-    ctx.fillStyle='#fff';ctx.font=value.length>13?'800 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif':'900 27px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText(trim(ctx,value,w-14),x+w/2,y+76);ctx.textAlign='left';
+    drawMetricValue(ctx,value,x+w/2,y+76,w-14);
+    ctx.textAlign='left';
   });
   ctx.fillStyle='#62c9ff';ctx.font='800 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText(trim(ctx,model.tagline,550),300,520);
   ctx.fillStyle='#8592b4';ctx.font='600 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText(`@${model.handle}`,300,552);
 
-  // QR / detail-report zone.
   ctx.fillStyle='rgba(8,16,38,.88)';ctx.strokeStyle='rgba(120,86,255,.72)';roundRect(ctx,900,64,250,475,18);ctx.fill();ctx.stroke();
   ctx.fillStyle='#fff';ctx.font='900 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.textAlign='center';ctx.fillText('詳細レポートはこちら！',1025,105);
-  try { const qr=await loadImage(model.qr_data_url); ctx.fillStyle='#fff';roundRect(ctx,938,132,174,174,8);ctx.fill();ctx.drawImage(qr,948,142,154,154); } catch {}
+  try { const qr=await loadImage(model.qr_data_url); ctx.fillStyle='#fff';roundRect(ctx,938,132,174,174,8);ctx.fill();ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,948,142,154,154);ctx.imageSmoothingEnabled=true; } catch {}
   ctx.fillStyle='#fff';ctx.font='800 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('スキャンして',1025,348);ctx.fillText('詳細Webレポートへ',1025,373);
   ctx.fillStyle='#7e89aa';ctx.font='600 13px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('powered by Developer Card',1025,493);ctx.textAlign='left';
   ctx.fillStyle='#7e8aad';ctx.font='600 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('Developer Card FV · public-safe GitHub Evidence',300,610);
@@ -140,14 +139,31 @@ function buildDetailSnapshot({result,repos}) {
 }
 
 async function makeQr(text){
+  if (!globalThis.QRCode) throw new Error('QR_RUNTIME_UNAVAILABLE');
+  const host=document.createElement('div');
+  host.style.cssText='position:fixed;left:-9999px;top:-9999px;width:220px;height:220px;pointer-events:none';
+  document.body.append(host);
   try {
-    const mod=await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm');
-    return await mod.default.toDataURL(text,{width:220,margin:1,errorCorrectionLevel:'M',color:{dark:'#050505',light:'#ffffff'}});
-  } catch {
-    return svgFallback('DETAIL');
+    new globalThis.QRCode(host,{text,width:220,height:220,colorDark:'#050505',colorLight:'#ffffff',correctLevel:globalThis.QRCode.CorrectLevel.M});
+    const canvas=host.querySelector('canvas');
+    if (canvas) return canvas.toDataURL('image/png');
+    const img=host.querySelector('img');
+    if (img?.src) return img.src;
+    throw new Error('QR_RENDER_FAILED');
+  } finally {
+    host.remove();
   }
 }
-function svgFallback(label){return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><rect width="220" height="220" fill="white"/><rect x="18" y="18" width="184" height="184" fill="none" stroke="#111" stroke-width="8"/><text x="110" y="116" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700">${label}</text></svg>`)}`;}
+function drawMetricValue(ctx,value,x,y,maxWidth){
+  const text=String(value??'');
+  if(text.includes(' / ')){
+    const parts=text.split(' / ').slice(0,2);
+    ctx.fillStyle='#fff';ctx.font='900 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText(trim(ctx,parts[0],maxWidth),x,y-8);
+    if(parts[1]){ctx.fillStyle='#cdd5eb';ctx.font='800 15px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText(trim(ctx,parts[1],maxWidth),x,y+15);}
+    return;
+  }
+  ctx.fillStyle='#fff';ctx.font=text.length>13?'800 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif':'900 27px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText(trim(ctx,text,maxWidth),x,y);
+}
 function formatLatest(iso){if(!iso)return '—';const d=days(iso);if(d<1)return 'Today';return iso.slice(5,10).replace('-','/');}
 function days(iso){return iso?Math.max(0,(Date.now()-Date.parse(iso))/86400000):9999;}
 function count(arr){return arr.reduce((o,x)=>(o[x]=(o[x]||0)+1,o),{});}
