@@ -1,5 +1,6 @@
 import {AUTH, normalizeRepo, diagnose, extractGitHubUser} from './diagnosis.mjs';
 import {buildShareCardModel, renderShareCardDom, exportShareCardPng} from './share-card.mjs';
+import {buildDeveloperCardReportV1, buildMachineReportUrl, serializeMachineReport} from './public-report.mjs';
 
 const $ = id => document.getElementById(id);
 let repos = [];
@@ -123,13 +124,8 @@ async function renderResult(result) {
   const handle = $('handle').value.trim() || user || 'Developer';
   const avatarSrc = avatarData || `https://github.com/${encodeURIComponent(user)}.png?size=320`;
   lastCardModel = await buildShareCardModel({result, repos, handle, githubUser:user, avatarSrc, publicRepoCount:publicRepoCount || repos.length});
-  lastCardModel.publicPayload = {
-    v:1, handle:lastCardModel.handle, github_user:lastCardModel.github_user, avatar_url:lastCardModel.avatar_url,
-    type:lastCardModel.type, type_description:lastCardModel.type_description, tagline:lastCardModel.tagline,
-    public_repo_count:lastCardModel.public_repo_count, evaluated_count:lastCardModel.evaluated_count,
-    showcase_count:lastCardModel.showcase_count, main_languages:lastCardModel.main_languages, latest_at:lastCardModel.latest_at,
-    recommended:lastCardModel.recommended, curiosity:lastCardModel.curiosity, detail:lastCardModel.detail
-  };
+  lastCardModel.publicPayload = buildDeveloperCardReportV1(lastCardModel);
+  lastCardModel.machine_url = buildMachineReportUrl(lastCardModel.publicPayload);
   window.__DC_PUBLIC_REPORT__ = lastCardModel.publicPayload;
   window.__DC_LAST_CARD_MODEL__ = lastCardModel;
   renderShareCardDom(lastCardModel);
@@ -154,11 +150,7 @@ $('download')?.addEventListener('click', async () => {
       }
       return;
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'developer-card-x.png';
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1200);
+    downloadBlob(blob, 'developer-card-x.png');
     setStatus('正本Xカード（1200×675 PNG）を書き出しました');
   } catch (e) {
     setStatus(`Xカードを書き出せませんでした: ${e.message}`);
@@ -171,13 +163,43 @@ $('share')?.addEventListener('click', async () => {
   try {
     await copyText(text);
     setStatus('X投稿文と詳細レポートURLをコピーしました');
-    const btn = $('share'); const old = btn.textContent; btn.textContent = 'コピーしました ✓';
-    setTimeout(()=>btn.textContent=old,1400);
+    flashButton($('share'), 'コピーしました ✓');
   } catch {
     setStatus('コピーできませんでした。長押しコピーを試してください');
   }
 });
 
+$('machineDownload')?.addEventListener('click', () => {
+  if (!lastCardModel?.publicPayload) return setStatus('先にGenerateしてください');
+  const json = serializeMachineReport(lastCardModel.publicPayload);
+  const blob = new Blob([json], {type:'application/json;charset=utf-8'});
+  downloadBlob(blob, 'developer-card-report-v1.json');
+  setStatus('DeveloperCardReport v1 JSONを書き出しました');
+});
+
+$('machineCopy')?.addEventListener('click', async () => {
+  if (!lastCardModel?.machine_url) return setStatus('先にGenerateしてください');
+  try {
+    await copyText(lastCardModel.machine_url);
+    setStatus('Machine-readable Report URLをコピーしました');
+    flashButton($('machineCopy'), 'コピーしました ✓');
+  } catch {
+    setStatus('Machine URLをコピーできませんでした');
+  }
+});
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1200);
+}
+function flashButton(btn, label) {
+  if (!btn) return;
+  const old = btn.textContent; btn.textContent = label;
+  setTimeout(()=>btn.textContent=old,1400);
+}
 async function copyText(text) {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
   const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.append(ta); ta.select();
