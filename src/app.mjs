@@ -143,6 +143,17 @@ $('download')?.addEventListener('click', async () => {
   if (!lastCardModel) return setStatus('先にGenerateしてください');
   try {
     const blob = await exportShareCardPng(lastCardModel);
+    const file = new File([blob], 'developer-card-x.png', {type:'image/png'});
+    if (navigator.canShare?.({files:[file]}) && navigator.share) {
+      try {
+        await navigator.share({files:[file], title:'Developer Card'});
+        setStatus('共有シートから「画像を保存」で写真へ保存できます');
+      } catch (e) {
+        if (String(e?.name || '') === 'AbortError') return;
+        throw e;
+      }
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'developer-card-x.png';
