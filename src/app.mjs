@@ -185,7 +185,7 @@ $('download')?.addEventListener('click', async () => {
 
 $('share')?.addEventListener('click', async () => {
   if (!lastCardModel) return setStatus('先にGenerateしてください');
-  const text = `GitHub解析で開発スタイル診断してみた。\n「${lastCardModel.type}」\n${lastCardModel.detail_url}\n#個人開発 #DeveloperCard`;
+  const text = `GitHub解析で開発スタイル診断してみた。\n「${lastCardModel.type}」\n${lastCardModel.detail_url}\n#DeveloperCard診断 #個人開発 #DeveloperCard`;
   try {
     await copyText(text);
     setStatus('X投稿文と詳細レポートURLをコピーしました');
