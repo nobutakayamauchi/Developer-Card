@@ -1,16 +1,25 @@
-import {readPublicReportFromLocation} from './public-report.mjs';
+import {readPublicReportFromLocation, isMachineReportLocation, serializeMachineReport} from './public-report.mjs';
 
 const $ = id => document.getElementById(id);
 const result = $('result');
 const sharedPayload = readPublicReportFromLocation();
 
 if (sharedPayload) {
-  renderSharedReport(sharedPayload);
+  if (isMachineReportLocation()) renderMachineReport(sharedPayload);
+  else renderSharedReport(sharedPayload);
 } else {
   window.addEventListener('dc:report-ready', event => {
     const payload = event.detail || window.__DC_PUBLIC_REPORT__;
     if (payload) renderTwoLayerReport(payload);
   });
+}
+
+function renderMachineReport(payload) {
+  const json = serializeMachineReport(payload);
+  document.title = `${payload.handle || 'Developer'} — DeveloperCardReport v1 JSON`;
+  document.documentElement.dataset.developerCardSchema = payload.schema || 'developer-card-report';
+  document.documentElement.dataset.developerCardSchemaVersion = String(payload.schema_version || 1);
+  document.body.innerHTML = `<main style="max-width:960px;margin:0 auto;padding:24px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#eaf0ff;background:#07101f;min-height:100vh"><h1 style="font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif">DeveloperCardReport v1</h1><p style="font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;color:#9aa8c8">Machine-readable public-safe JSON view. FVでは静的GitHub Pages上でブラウザ実行により復元します。</p><pre id="machineReport" data-schema="${escAttr(payload.schema)}" data-schema-version="${Number(payload.schema_version)||1}" style="white-space:pre-wrap;overflow-wrap:anywhere;background:#0c1730;border:1px solid #293c67;border-radius:12px;padding:18px">${esc(json)}</pre></main>`;
 }
 
 function renderSharedReport(payload) {
