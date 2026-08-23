@@ -21,7 +21,7 @@ if (input) {
       const status = document.getElementById('status');
       if (status) {
         const reduction = file.size > compressed.size * 1.35 ? ` (${Math.round(file.size/1024)}KB → ${Math.round(compressed.size/1024)}KB)` : '';
-        status.textContent = `表示画像をカード向けに軽量化・背景処理しました${reduction}`;
+        status.textContent = `表示画像をカード向けに軽量化・背景透過・余白トリミングしました${reduction}`;
       }
     } catch {
       input.value = '';
@@ -41,11 +41,44 @@ async function downscaleImage(file,maxW,maxH,quality){
     const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
     const ctx=canvas.getContext('2d',{alpha:true});ctx.clearRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
     removeConnectedLightBackground(ctx,w,h);
-    let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));
-    if(!blob) blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+
+    const cropped = cropTransparentMargins(canvas, 0.08);
+    const output = cropped || canvas;
+    let blob=await new Promise(resolve=>output.toBlob(resolve,'image/webp',quality));
+    if(!blob) blob=await new Promise(resolve=>output.toBlob(resolve,'image/png'));
+    if(cropped){cropped.width=1;cropped.height=1;}
     canvas.width=1;canvas.height=1;
     return blob;
   }finally{URL.revokeObjectURL(url);}
+}
+
+function cropTransparentMargins(canvas,paddingRatio=0.08){
+  const w=canvas.width,h=canvas.height;
+  if(w<2||h<2)return null;
+  const ctx=canvas.getContext('2d',{alpha:true});
+  const image=ctx.getImageData(0,0,w,h);
+  const d=image.data;
+  let minX=w,minY=h,maxX=-1,maxY=-1,visible=0;
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const a=d[(y*w+x)*4+3];
+      if(a<=12)continue;
+      visible++;
+      if(x<minX)minX=x;if(x>maxX)maxX=x;
+      if(y<minY)minY=y;if(y>maxY)maxY=y;
+    }
+  }
+  if(!visible||maxX<minX||maxY<minY)return null;
+  const bw=maxX-minX+1,bh=maxY-minY+1;
+  // If almost the whole canvas is visible (ordinary photo), cropping adds no value.
+  if(bw>=w*0.94&&bh>=h*0.94)return null;
+  const pad=Math.max(4,Math.round(Math.max(bw,bh)*paddingRatio));
+  const sx=Math.max(0,minX-pad),sy=Math.max(0,minY-pad);
+  const ex=Math.min(w,maxX+pad+1),ey=Math.min(h,maxY+pad+1);
+  const sw=Math.max(1,ex-sx),sh=Math.max(1,ey-sy);
+  const out=document.createElement('canvas');out.width=sw;out.height=sh;
+  const outCtx=out.getContext('2d',{alpha:true});outCtx.clearRect(0,0,sw,sh);outCtx.drawImage(canvas,sx,sy,sw,sh,0,0,sw,sh);
+  return out;
 }
 
 function removeConnectedLightBackground(ctx,w,h){
