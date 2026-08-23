@@ -135,6 +135,21 @@ async function renderResult(result) {
   const handle = $('handle').value.trim() || user || 'Developer';
   const avatarSrc = avatarData || `https://github.com/${encodeURIComponent(user)}.png?size=320`;
   lastCardModel = await buildShareCardModel({result, repos, handle, githubUser:user, avatarSrc, publicRepoCount:publicRepoCount || repos.length});
+  lastCardModel.evidence_count = result.evidence_count;
+  lastCardModel.evidence_coverage = result.evidence_coverage;
+  lastCardModel.evidence_summary = result.evidence_summary;
+  lastCardModel.detail = {
+    ...(lastCardModel.detail || {}),
+    evidence:{
+      analyzed_repos:result.evidence_count,
+      evaluated_repos:result.evaluated_count,
+      coverage:result.evidence_coverage,
+      signatures:result.evidence_summary?.signatures || [],
+      repos_with_tests:result.evidence_summary?.repos_with_tests || 0,
+      repos_with_ci:result.evidence_summary?.repos_with_ci || 0,
+      strong_architecture_repos:result.evidence_summary?.strong_architecture_repos || 0
+    }
+  };
   lastCardModel.publicPayload = buildDeveloperCardReportV1(lastCardModel);
   lastCardModel.machine_url = buildMachineReportUrl(lastCardModel.publicPayload);
   window.__DC_PUBLIC_REPORT__ = lastCardModel.publicPayload;
