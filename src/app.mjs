@@ -63,7 +63,6 @@ async function fetchGitHubRepos(user) {
       return await res.json();
     } catch (e) {
       lastError = e;
-      // HTTP errors are deterministic enough not to hammer GitHub except 5xx.
       if (e?.status && e.status < 500) break;
     }
   }
@@ -126,8 +125,8 @@ function renderResult(result) {
 
 $('share').addEventListener('click', async () => {
   const text = `GitHub開発スタイル診断やってみた。\n${$('cardType').textContent}\n#個人開発 #DeveloperCard`;
-  if (navigator.share) return navigator.share({text}).catch(()=>{});
-  await navigator.clipboard?.writeText(text); setStatus('X投稿用テキストをコピーしました');
+  const xIntent = `https://x.com/intent/post?text=${encodeURIComponent(text)}`;
+  window.open(xIntent, '_blank', 'noopener,noreferrer');
 });
 
 $('download').addEventListener('click', async () => {
@@ -136,7 +135,12 @@ $('download').addEventListener('click', async () => {
     const blob = await renderPngCard(lastResult);
     const file = new File([blob], 'developer-card.png', {type:'image/png'});
     if (navigator.canShare?.({files:[file]})) {
-      await navigator.share({files:[file], title:'Developer Card'});
+      try {
+        await navigator.share({files:[file], title:'Developer Card'});
+      } catch (e) {
+        if (isShareCancelled(e)) return;
+        throw e;
+      }
       return;
     }
     const url = URL.createObjectURL(blob);
@@ -144,9 +148,16 @@ $('download').addEventListener('click', async () => {
     setTimeout(()=>URL.revokeObjectURL(url), 1500);
     setStatus('16:9 PNGカードを書き出しました');
   } catch (e) {
+    if (isShareCancelled(e)) return;
     setStatus(`カードを書き出せませんでした: ${e.message}`);
   }
 });
+
+function isShareCancelled(e) {
+  const name = String(e?.name || '');
+  const message = String(e?.message || e || '');
+  return name === 'AbortError' || /abort|cancel/i.test(message);
+}
 
 async function renderPngCard(result) {
   const c = document.createElement('canvas'); c.width = 1200; c.height = 675;
@@ -193,4 +204,4 @@ function roundRect(ctx,x,y,w,h,r){ const rr=Math.min(r,w/2,h/2); ctx.beginPath()
 function wrapText(ctx,text,x,y,maxWidth,lineHeight,maxLines){ const chars=[...String(text)]; let line='',lines=0; for(const ch of chars){const test=line+ch;if(ctx.measureText(test).width>maxWidth&&line){ctx.fillText(line,x,y+lines*lineHeight);lines++;line=ch;if(lines>=maxLines)return;}else line=test;} if(lines<maxLines)ctx.fillText(line,x,y+lines*lineHeight); }
 function trimText(ctx,text,maxWidth){ let out=String(text??''); if(ctx.measureText(out).width<=maxWidth)return out; while(out.length&&ctx.measureText(out+'…').width>maxWidth)out=out.slice(0,-1); return out+'…'; }
 function setStatus(s){ $('status').textContent=s; }
-function escapeHtml(s){ return String(s??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function escapeHtml(s){ return String(s??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt',"'":'&#39;','"':'&quot;'}[c])); }
