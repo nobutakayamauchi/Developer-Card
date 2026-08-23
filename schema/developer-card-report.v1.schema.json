@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://developer-card.invalid/schema/developer-card-report.v1.schema.json",
+  "title": "DeveloperCardReport v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "v", "public_safe", "evidence_scope", "handle", "github_user", "type", "recommended", "detail"],
+  "properties": {
+    "schema": {"const": "developer-card-report"},
+    "schema_version": {"const": 1},
+    "v": {"const": 1},
+    "public_safe": {"const": true},
+    "evidence_scope": {"const": "public-safe-aggregate"},
+    "handle": {"type": "string", "maxLength": 500},
+    "github_user": {"type": "string", "maxLength": 500},
+    "avatar_url": {"type": "string"},
+    "type": {"type": "string", "maxLength": 500},
+    "type_description": {"type": "string", "maxLength": 500},
+    "tagline": {"type": "string", "maxLength": 500},
+    "public_repo_count": {"type": "number"},
+    "evaluated_count": {"type": "number"},
+    "showcase_count": {"type": "number"},
+    "main_languages": {"type": "string", "maxLength": 500},
+    "latest_at": {"type": ["string", "null"], "maxLength": 500},
+    "recommended": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reason"],
+        "properties": {
+          "name": {"type": "string", "maxLength": 500},
+          "reason": {"type": "string", "maxLength": 500}
+        }
+      }
+    },
+    "curiosity": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 500}},
+    "detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axes", "language_shares", "activity", "activity_label", "recommended", "traits", "strengths", "growth"],
+      "properties": {
+        "axes": {"type": "array", "items": {"$ref": "#/$defs/metricTuple"}},
+        "language_shares": {"type": "array", "items": {"$ref": "#/$defs/languageShare"}},
+        "activity": {"type": "array", "items": {"$ref": "#/$defs/activityTuple"}},
+        "activity_label": {"type": "string", "maxLength": 500},
+        "recommended": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/recommendedDetail"}},
+        "traits": {"type": "array", "items": {"$ref": "#/$defs/metricTuple"}},
+        "strengths": {"type": "array", "maxItems": 6, "items": {"type": "string", "maxLength": 500}},
+        "growth": {"type": "array", "maxItems": 6, "items": {"type": "string", "maxLength": 500}}
+      }
+    }
+  },
+  "$defs": {
+    "metricTuple": {
+      "type": "array",
+      "prefixItems": [{"type": "string", "maxLength": 500}, {"type": "number"}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "activityTuple": {
+      "type": "array",
+      "prefixItems": [{"type": "string", "maxLength": 500}, {"type": "number"}, {"type": "number"}],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "languageShare": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": {"type": "string", "maxLength": 500},
+        "value": {"type": "number"}
+      }
+    },
+    "recommendedDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reason", "language", "updated_at"],
+      "properties": {
+        "name": {"type": "string", "maxLength": 500},
+        "reason": {"type": "string", "maxLength": 500},
+        "language": {"type": "string", "maxLength": 500},
+        "updated_at": {"type": ["string", "null"], "maxLength": 500}
+      }
+    }
+  }
+}
