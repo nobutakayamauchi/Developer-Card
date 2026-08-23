@@ -11,7 +11,7 @@ if (input) {
     event.stopImmediatePropagation();
     event.preventDefault();
     try {
-      const compressed = await downscaleImage(file, 640, 640, 0.84);
+      const compressed = await downscaleImage(file, 512, 512, 0.86);
       if (!compressed) throw new Error('IMAGE_DOWNSCALE_FAILED');
       const dt = new DataTransfer();
       dt.items.add(new File([compressed], safeName(file.name, compressed.type), {type: compressed.type || 'image/webp'}));
@@ -19,7 +19,10 @@ if (input) {
       input.dataset.dcCompressed = '1';
       input.dispatchEvent(new Event('change', {bubbles:true}));
       const status = document.getElementById('status');
-      if (status && file.size > compressed.size * 1.35) status.textContent = `表示画像をスマホ向けに軽量化しました (${Math.round(file.size/1024)}KB → ${Math.round(compressed.size/1024)}KB)`;
+      if (status) {
+        const reduction = file.size > compressed.size * 1.35 ? ` (${Math.round(file.size/1024)}KB → ${Math.round(compressed.size/1024)}KB)` : '';
+        status.textContent = `表示画像をカード向けに軽量化・背景処理しました${reduction}`;
+      }
     } catch {
       input.value = '';
       const status = document.getElementById('status');
@@ -37,11 +40,43 @@ async function downscaleImage(file,maxW,maxH,quality){
     const h=Math.max(1,Math.round(img.naturalHeight*scale));
     const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
     const ctx=canvas.getContext('2d',{alpha:true});ctx.clearRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+    removeConnectedLightBackground(ctx,w,h);
     let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));
     if(!blob) blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
     canvas.width=1;canvas.height=1;
     return blob;
   }finally{URL.revokeObjectURL(url);}
+}
+
+function removeConnectedLightBackground(ctx,w,h){
+  if(w<2||h<2)return;
+  const image=ctx.getImageData(0,0,w,h);
+  const d=image.data;
+  let lightBorder=0,border=0;
+  const borderPixel=(x,y)=>{border++;if(isBackground(d,(y*w+x)*4))lightBorder++;};
+  for(let x=0;x<w;x++){borderPixel(x,0);borderPixel(x,h-1);}
+  for(let y=1;y<h-1;y++){borderPixel(0,y);borderPixel(w-1,y);}
+  if(!border||lightBorder/border<0.55)return;
+
+  const seen=new Uint8Array(w*h);
+  const queue=new Int32Array(w*h);
+  let head=0,tail=0;
+  const push=index=>{if(seen[index])return;const p=index*4;if(!isBackground(d,p))return;seen[index]=1;queue[tail++]=index;};
+  for(let x=0;x<w;x++){push(x);push((h-1)*w+x);}
+  for(let y=1;y<h-1;y++){push(y*w);push(y*w+w-1);}
+  while(head<tail){
+    const i=queue[head++],x=i%w,y=(i/w)|0,p=i*4;
+    d[p+3]=0;
+    if(x>0)push(i-1);if(x<w-1)push(i+1);if(y>0)push(i-w);if(y<h-1)push(i+w);
+  }
+  ctx.putImageData(image,0,0);
+}
+
+function isBackground(d,p){
+  const a=d[p+3],r=d[p],g=d[p+1],b=d[p+2];
+  if(a<20)return true;
+  const min=Math.min(r,g,b),max=Math.max(r,g,b);
+  return min>=238 && max-min<=16;
 }
 function loadImage(src){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=src;});}
 function safeName(name,type){const base=String(name||'avatar').replace(/\.[^.]+$/,'').slice(0,80)||'avatar';return `${base}-dc.${type==='image/png'?'png':'webp'}`;}
