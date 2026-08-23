@@ -33,12 +33,19 @@ export async function buildShareCardModel({result, repos, handle, githubUser, av
     detail
   };
   const detailUrl = buildPublicReportUrl(payload);
-  const qrDataUrl = await makeQr(detailUrl);
+  let qrDataUrl = '';
+  let qrError = null;
+  try {
+    qrDataUrl = await makeQr(detailUrl);
+  } catch (err) {
+    qrError = String(err?.message || err || 'QR_GENERATION_FAILED');
+  }
   return {
     ...payload,
     avatar_src: avatarSrc || publicAvatar,
     detail_url: detailUrl,
     qr_data_url: qrDataUrl,
+    qr_error: qrError,
     metrics: [
       ['公開repo', String(publicRepoCount)],
       ['評価対象', String(result.evaluated_count)],
@@ -56,7 +63,22 @@ export function renderShareCardDom(model, root = document) {
   const avatar = root.getElementById('cardAvatar');
   if (avatar) avatar.src = model.avatar_src;
   const qr = root.getElementById('detailQr');
-  if (qr) qr.src = model.qr_data_url;
+  const frame = qr?.closest?.('.qr-frame');
+  if (qr && model.qr_data_url) {
+    qr.hidden = false;
+    qr.src = model.qr_data_url;
+    frame?.querySelector('.qr-unavailable')?.remove();
+  } else if (qr) {
+    qr.hidden = true;
+    qr.removeAttribute('src');
+    if (frame && !frame.querySelector('.qr-unavailable')) {
+      const note = document.createElement('span');
+      note.className = 'qr-unavailable';
+      note.textContent = 'QR生成失敗\n投稿文URLから詳細へ';
+      note.style.cssText = 'display:flex;white-space:pre-line;align-items:center;justify-content:center;width:100%;height:100%;color:#111;font-weight:800;font-size:.8em;line-height:1.25;text-align:center';
+      frame.append(note);
+    }
+  }
   const stats = root.getElementById('shareStats');
   if (stats) stats.innerHTML = model.metrics.map(([label,value]) => `<div class="share-stat"><small>${esc(label)}</small><strong>${esc(value)}</strong></div>`).join('');
 }
@@ -99,7 +121,15 @@ export async function exportShareCardPng(model) {
 
   ctx.fillStyle='rgba(8,16,38,.88)';ctx.strokeStyle='rgba(120,86,255,.72)';roundRect(ctx,900,64,250,475,18);ctx.fill();ctx.stroke();
   ctx.fillStyle='#fff';ctx.font='900 20px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.textAlign='center';ctx.fillText('詳細レポートはこちら！',1025,105);
-  try { const qr=await loadImage(model.qr_data_url); ctx.fillStyle='#fff';roundRect(ctx,938,132,174,174,8);ctx.fill();ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,948,142,154,154);ctx.imageSmoothingEnabled=true; } catch {}
+  if (model.qr_data_url) {
+    try {
+      const qr=await loadImage(model.qr_data_url);
+      ctx.fillStyle='#fff';roundRect(ctx,938,132,174,174,8);ctx.fill();ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,948,142,154,154);ctx.imageSmoothingEnabled=true;
+    } catch {}
+  } else {
+    ctx.fillStyle='#fff';roundRect(ctx,938,132,174,174,8);ctx.fill();
+    ctx.fillStyle='#111';ctx.font='800 15px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('QR生成失敗',1025,210);ctx.font='700 12px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('投稿文URLから詳細へ',1025,238);
+  }
   ctx.fillStyle='#fff';ctx.font='800 18px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('スキャンして',1025,348);ctx.fillText('詳細Webレポートへ',1025,373);
   ctx.fillStyle='#7e89aa';ctx.font='600 13px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('powered by Developer Card',1025,493);ctx.textAlign='left';
   ctx.fillStyle='#7e8aad';ctx.font='600 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';ctx.fillText('Developer Card FV · public-safe GitHub Evidence',300,610);
@@ -144,7 +174,7 @@ async function makeQr(text){
   host.style.cssText='position:fixed;left:-9999px;top:-9999px;width:220px;height:220px;pointer-events:none';
   document.body.append(host);
   try {
-    new globalThis.QRCode(host,{text,width:220,height:220,colorDark:'#050505',colorLight:'#ffffff',correctLevel:globalThis.QRCode.CorrectLevel.M});
+    new globalThis.QRCode(host,{text,width:220,height:220,colorDark:'#050505',colorLight:'#ffffff',correctLevel:globalThis.QRCode.CorrectLevel.L});
     const canvas=host.querySelector('canvas');
     if (canvas) return canvas.toDataURL('image/png');
     const img=host.querySelector('img');
