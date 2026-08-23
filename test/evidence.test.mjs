@@ -26,7 +26,7 @@ test('recursive tree yields structural Evidence without reading code bodies', ()
   assert.ok(ev.architecture_score > 40);
 });
 
-test('diagnosis reports actual Evidence coverage and uses evidence-aware recommendation reasons', () => {
+test('diagnosis reports actual Evidence coverage and preserves Evidence state per recommendation', () => {
   const base = normalizeRepo({full_name:'u/app',name:'app',html_url:'https://github.com/u/app',language:'TypeScript',size:1200,updated_at:new Date().toISOString(),default_branch:'main'});
   base.authorization = AUTH.SHOWCASE_AND_EVALUATE;
   base.evidence = analyzeTree([
@@ -42,7 +42,10 @@ test('diagnosis reports actual Evidence coverage and uses evidence-aware recomme
   assert.equal(result.evidence_count, 1);
   assert.equal(result.evidence_coverage, 50);
   assert.ok(result.highlights.some(x => /実ファイル構造Evidenceを1\/2/.test(x)));
-  assert.equal(result.recommended[0].evidence_available, true);
+  const appRecommendation = result.recommended.find(x => x.name === 'app');
+  assert.ok(appRecommendation);
+  assert.equal(appRecommendation.evidence_available, true);
+  assert.ok(appRecommendation.evidence?.file_count >= 5);
 });
 
 test('machine report preserves aggregate Evidence but not arbitrary runtime evidence objects', () => {
