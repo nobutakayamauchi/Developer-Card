@@ -18,19 +18,69 @@ $('load').addEventListener('click', async () => {
   const user = extractGitHubUser($('github').value);
   if (!user) return setStatus('GitHub URL / usernameを確認してください');
   setStatus('GitHubを読み込み中…');
+  $('load').disabled = true;
   try {
-    const res = await fetch(`https://api.github.com/users/${encodeURIComponent(user)}/repos?per_page=100&sort=updated`);
-    if (!res.ok) throw new Error(`GITHUB_${res.status}`);
-    const data = await res.json();
+    const data = await fetchGitHubRepos(user);
     repos = data.filter(r => !r.private).slice(0, 30).map(r => normalizeRepo(r));
     if (!repos.length) throw new Error('NO_PUBLIC_REPOS');
     renderRepos();
     $('repoStep').classList.remove('hidden');
     setStatus(`${repos.length}件の公開repoを取得しました`);
   } catch (e) {
-    setStatus(`取得できませんでした: ${e.message}`);
+    const message = friendlyGitHubError(e);
+    setStatus(`取得できませんでした: ${message}`);
+  } finally {
+    $('load').disabled = false;
   }
 });
+
+async function fetchGitHubRepos(user) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (attempt > 1) {
+        setStatus(`GitHub接続を再試行中… (${attempt}/3)`);
+        await sleep(700 * attempt);
+      }
+      const qs = new URLSearchParams({per_page:'100', sort:'updated', type:'owner', _:String(Date.now())});
+      const res = await fetch(`https://api.github.com/users/${encodeURIComponent(user)}/repos?${qs}`, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-store',
+        credentials: 'omit',
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28'
+        }
+      });
+      if (!res.ok) {
+        const remaining = res.headers.get('x-ratelimit-remaining');
+        const err = new Error(`GITHUB_${res.status}`);
+        err.status = res.status;
+        err.rateRemaining = remaining;
+        throw err;
+      }
+      return await res.json();
+    } catch (e) {
+      lastError = e;
+      // HTTP errors are deterministic enough not to hammer GitHub except 5xx.
+      if (e?.status && e.status < 500) break;
+    }
+  }
+  throw lastError || new Error('GITHUB_LOAD_FAILED');
+}
+
+function friendlyGitHubError(e) {
+  if (e?.status === 403 && e?.rateRemaining === '0') return 'GitHub APIの無料枠上限に達しました。少し待って再試行してください';
+  if (e?.status === 404) return 'GitHubユーザーが見つかりません';
+  if (e?.status === 403) return 'GitHub APIに拒否されました。少し待って再試行してください';
+  if (e?.status >= 500) return 'GitHub側が一時的に不安定です。少し待って再試行してください';
+  if (e?.message === 'NO_PUBLIC_REPOS') return '公開repoが見つかりません';
+  if (/Load failed|Failed to fetch|NetworkError|GITHUB_LOAD_FAILED/i.test(String(e?.message || e))) return 'GitHubへの接続が一時的に失敗しました。自動再試行でも復旧しませんでした';
+  return e?.message || 'UNKNOWN_ERROR';
+}
+
+function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
 
 function renderRepos() {
   $('repos').innerHTML = '';
@@ -143,4 +193,4 @@ function roundRect(ctx,x,y,w,h,r){ const rr=Math.min(r,w/2,h/2); ctx.beginPath()
 function wrapText(ctx,text,x,y,maxWidth,lineHeight,maxLines){ const chars=[...String(text)]; let line='',lines=0; for(const ch of chars){const test=line+ch;if(ctx.measureText(test).width>maxWidth&&line){ctx.fillText(line,x,y+lines*lineHeight);lines++;line=ch;if(lines>=maxLines)return;}else line=test;} if(lines<maxLines)ctx.fillText(line,x,y+lines*lineHeight); }
 function trimText(ctx,text,maxWidth){ let out=String(text??''); if(ctx.measureText(out).width<=maxWidth)return out; while(out.length&&ctx.measureText(out+'…').width>maxWidth)out=out.slice(0,-1); return out+'…'; }
 function setStatus(s){ $('status').textContent=s; }
-function escapeHtml(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function escapeHtml(s){ return String(s??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
