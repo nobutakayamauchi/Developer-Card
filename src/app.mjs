@@ -1,4 +1,5 @@
 import {AUTH, normalizeRepo, diagnose, extractGitHubUser} from './diagnosis.mjs';
+import {enrichReposWithEvidence} from './evidence.mjs';
 import {buildShareCardModel, renderShareCardDom, exportShareCardPng} from './share-card.mjs';
 import {buildDeveloperCardReportV1, buildMachineReportUrl, serializeMachineReport} from './public-report.mjs';
 
@@ -97,7 +98,7 @@ function renderRepos() {
 
 $('confirm')?.addEventListener('click', () => {
   const counts = repos.reduce((a,r)=>(a[r.authorization]=(a[r.authorization]||0)+1,a),{});
-  $('confirmText').textContent = `見せる＋評価 ${counts[AUTH.SHOWCASE_AND_EVALUATE]||0}件 / 評価だけ ${counts[AUTH.EVALUATE_ONLY]||0}件 / 除外 ${counts[AUTH.EXCLUDE]||0}件。このEvidenceで解析してよいですか？`;
+  $('confirmText').textContent = `見せる＋評価 ${counts[AUTH.SHOWCASE_AND_EVALUATE]||0}件 / 評価だけ ${counts[AUTH.EVALUATE_ONLY]||0}件 / 除外 ${counts[AUTH.EXCLUDE]||0}件。次に各repoの実ファイル構造Evidenceを取得して解析します。よいですか？`;
   $('confirmDialog').showModal();
 });
 
@@ -105,10 +106,20 @@ $('generate')?.addEventListener('click', async e => {
   e.preventDefault();
   $('generate').disabled = true;
   try {
+    const authorizedCount = repos.filter(r => r.authorization !== AUTH.EXCLUDE).length;
+    setStatus(`Evidence取得を開始します… 0/${authorizedCount}`);
+    await enrichReposWithEvidence(repos, {
+      onProgress: ({completed,total,repo,status,error}) => {
+        const suffix = status === 'cached' ? '（cache）' : status === 'error' ? `（${error}）` : status === 'skipped' ? '（上限のため省略）' : '';
+        setStatus(`実ファイル構造Evidenceを取得中… ${completed}/${total} ${repo?.name || ''}${suffix}`);
+      }
+    });
     lastResult = diagnose(repos);
     await renderResult(lastResult);
     $('confirmDialog').close();
     $('result').classList.remove('hidden');
+    const missing = Math.max(0, lastResult.evaluated_count - lastResult.evidence_count);
+    setStatus(`Evidence解析完了: ${lastResult.evidence_count}/${lastResult.evaluated_count} repo${missing ? `（未取得 ${missing}件はメタデータのみ）` : ''}`);
     window.dispatchEvent(new CustomEvent('dc:report-ready', {detail:lastCardModel?.publicPayload || window.__DC_PUBLIC_REPORT__}));
     $('result').scrollIntoView({behavior:'smooth'});
   } catch (err) {
@@ -130,7 +141,7 @@ async function renderResult(result) {
   window.__DC_LAST_CARD_MODEL__ = lastCardModel;
   renderShareCardDom(lastCardModel);
   $('recommended').innerHTML = result.recommended.length
-    ? '<h3>おすすめrepo</h3>' + result.recommended.map(r=>`<p><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.reason)}</p>`).join('')
+    ? `<p class="micro">実ファイル構造Evidence: ${result.evidence_count}/${result.evaluated_count} repo</p><h3>おすすめrepo</h3>` + result.recommended.map(r=>`<p><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.reason)}${r.evidence_available ? ' <small>Evidence済</small>' : ' <small>metadataのみ</small>'}</p>`).join('')
     : '<p>公開候補repoは選択されていません。</p>';
   $('curiosity').innerHTML = result.curiosity.map(x=>`<li>${escapeHtml(x)}</li>`).join('');
 }
